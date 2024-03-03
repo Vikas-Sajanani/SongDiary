@@ -17,7 +17,7 @@ require('dotenv').config();
 
 var client_id = process.env.SPOTIFY_CLIENT_ID; // Your client id
 var client_secret = process.env.SPOTIFY_CLIENT_SECRET; // Your secret
-var redirect_uri = process.env.REDIRECT_URL; // Your redirect uri
+var redirect_uri = process.env.REDIRECT_URI; // Your redirect uri
 
 
 const generateRandomString = (length) => {
