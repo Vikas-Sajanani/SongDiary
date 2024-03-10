@@ -15,10 +15,22 @@ var querystring = require('querystring');
 var cookieParser = require('cookie-parser');
 require('dotenv').config();
 
-var client_id = process.env.SPOTIFY_CLIENT_ID; // Your client id
-var client_secret = process.env.SPOTIFY_CLIENT_SECRET; // Your secret
-var redirect_uri = process.env.REDIRECT_URI; // Your redirect uri
+var fs = require('fs');
+var readline = require('readline');
+var {google} = require('googleapis');
+var OAuth2 = google.auth.OAuth2;
 
+// If modifying these scopes, delete your previously saved credentials
+// at ~/.credentials/youtube-nodejs-quickstart.json
+var TOKEN_DIR = (process.env.HOME || process.env.HOMEPATH ||
+    process.env.USERPROFILE) + '/.credentials/';
+var TOKEN_PATH = TOKEN_DIR + 'youtube-nodejs-quickstart.json';
+
+var client_id = process.env.SPOTIFY_CLIENT_ID; // Your client id Spotify
+var client_secret = process.env.SPOTIFY_CLIENT_SECRET; // Your secret Spotify
+var redirect_uri = process.env.REDIRECT_URI; // Your redirect uri Spotify
+
+const { getNewToken, getChannel } = require("./ytauth.js");
 
 const generateRandomString = (length) => {
   return crypto
@@ -142,6 +154,50 @@ app.get('/refresh_token', function(req, res) {
     }
   });
 });
+
+app.get('/ytlogin', function(req, res) {
+
+  // your application requests authorization
+fs.readFile('client_secret.json', function processClientSecrets(err, content) {
+  if (err) {
+    console.log('Error loading client secret file: ' + err);
+    return;
+  }
+  // Authorize a client with the loaded credentials, then call the YouTube API.
+  console.log("read file read secret as "+content);
+  var channelData = authorize(JSON.parse(content), getChannel);
+});
+
+//res.redirect('http://localhost:3000/ytcallback'+'?data=channelDataTest');
+
+});
+
+app.get('/ytcallback', function(req, res) {
+//const channelData = req.query.data;
+const channelData = 'data';
+res.send({'channelData' : channelData});
+});
+
+function authorize(credentials, callback) {
+  console.log(credentials);
+  var clientSecret = credentials.web.client_secret;
+  var clientId = credentials.web.client_id;
+  var redirectUrl = credentials.web.redirect_uris[0];
+  var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
+
+  // Check if we have previously stored a token.
+  fs.readFile(TOKEN_PATH, function(err, token) {
+    if (err) {
+      var channelData = getNewToken(oauth2Client, callback);
+    } else {
+      oauth2Client.credentials = JSON.parse(token);
+     var channelData = callback(oauth2Client);
+     console.log(channelData);
+    }
+
+    return channelData;
+  });
+}
 
 console.log('Listening on 3000');
 app.listen(3000);
