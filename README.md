@@ -24,6 +24,9 @@ to your Google YT account for given scope. Once these are granted the service wi
 and log a 400 invalid request error once the logic is being execute.
 This is being investigated and expected to be fixed by April release.
 
+Safety considerations - never share generated secrets from YT or Spotify services. Be careful to not publish them if forking this code into your own repository.
+Change scope of service if you are not comfortable with it (this may affect functionality). Set up GitHub Guardian and carefully review auth documentation for good practices.
+
 ## Installation
 This app is under ongoing development, for the latest version of the app please clone the monthly feature branch in your environment
 
