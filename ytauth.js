@@ -7,7 +7,9 @@ var TOKEN_DIR = (process.env.HOME || process.env.HOMEPATH ||
     process.env.USERPROFILE) + '/.credentials/';
 var TOKEN_PATH = TOKEN_DIR + 'youtube-nodejs-quickstart.json';
 
-  function getNewToken(oauth2Client, callback) {
+// Updated: getNewToken now returns a Promise
+function getNewToken(oauth2Client) {
+  return new Promise((resolve, reject) => {
     var authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: SCOPES
@@ -21,42 +23,34 @@ var TOKEN_PATH = TOKEN_DIR + 'youtube-nodejs-quickstart.json';
       rl.close();
       oauth2Client.getToken(code, function(err, token) {
         if (err) {
-          console.log('Error while trying to retrieve access token', err);
-          return null;
+          reject('Error while trying to retrieve access token: ' + err);
+        } else {
+          oauth2Client.credentials = token;
+          storeToken(token);
+          resolve(oauth2Client);  // Resolve with oauth2Client containing credentials
         }
-        oauth2Client.credentials = token;
-        storeToken(token);
-        var channelData = callback(oauth2Client);
-        return channelData;
       });
     });
-  }
-  
-  /**
-   * Store token to disk be used in later program executions.
-   *
-   * @param {Object} token The token to store to disk.
-   */
-  function storeToken(token) {
-    try {
-      fs.mkdirSync(TOKEN_DIR);
-    } catch (err) {
-      if (err.code != 'EEXIST') {
-        throw err;
-      }
+  });
+}
+
+function storeToken(token) {
+  try {
+    fs.mkdirSync(TOKEN_DIR);
+  } catch (err) {
+    if (err.code != 'EEXIST') {
+      throw err;
     }
-    fs.writeFile(TOKEN_PATH, JSON.stringify(token), (err) => {
-      if (err) throw err;
-      console.log('Token stored to ' + TOKEN_PATH);
-    });
   }
-  
-  /**
-   * Lists the names and IDs of up to 10 files.
-   *
-   * @param {google.auth.OAuth2} auth An authorized OAuth2 client.
-   */
-  function getChannel(auth) {
+  fs.writeFile(TOKEN_PATH, JSON.stringify(token), (err) => {
+    if (err) throw err;
+    console.log('Token stored to ' + TOKEN_PATH);
+  });
+}
+
+// Updated: getChannel now returns a Promise
+function getChannel(auth) {
+  return new Promise((resolve, reject) => {
     var service = google.youtube('v3');
     service.channels.list({
       auth: auth,
@@ -64,28 +58,25 @@ var TOKEN_PATH = TOKEN_DIR + 'youtube-nodejs-quickstart.json';
       forUsername: 'GoogleDevelopers'
     }, function(err, response) {
       if (err) {
-        console.log('The API returned an error: ' + err);
-        return null;
-      }
-      var channels = response.data.items;
-      if (channels.length == 0) {
-        console.log('No channel found.');
-        var channelData = 'No channel Found'
-        return channelData;
+        reject('The API returned an error: ' + err);
       } else {
-        console.log('This channel\'s ID is %s. Its title is \'%s\', and ' +
-                    'it has %s views.',
-                    channels[0].id,
-                    channels[0].snippet.title,
-                    channels[0].statistics.viewCount);
-
-                    var channelData = {id : channels[0].id, title : channels[0].snippet.title, viewCount : channels[0].statistics.viewCount};
-                    return channelData;
+        var channels = response.data.items;
+        if (channels.length == 0) {
+          reject('No channel found.');
+        } else {
+          var channelData = {
+            id: channels[0].id,
+            title: channels[0].snippet.title,
+            viewCount: channels[0].statistics.viewCount
+          };
+          resolve(channelData);  // Resolve with channel data
+        }
       }
     });
-  }
-  
-  module.exports = {
-    getNewToken,
-    getChannel
-  }
+  });
+}
+
+module.exports = {
+  getNewToken,
+  getChannel
+};

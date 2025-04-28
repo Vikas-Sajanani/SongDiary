@@ -155,47 +155,69 @@ app.get('/refresh_token', function(req, res) {
   });
 });
 
-app.get('/ytlogin', function(req, res) {
+app.get('/ytlogin', async function(req, res) {
+  try {
+    // Make sure the function is async and you can use await
+    const content = await fs.promises.readFile('client_secret.json', 'utf8');
+    console.log("read file read secret as " + content);
 
-  // your application requests authorization
-fs.readFile('client_secret.json', function processClientSecrets(err, content) {
-  if (err) {
-    console.log('Error loading client secret file: ' + err);
-    return;
+    const credentials = JSON.parse(content);
+
+    // Assuming `authorize` returns a Promise, and we await it here
+    const channelData = await authorize(credentials, getChannel); // This works now
+
+    console.log(channelData);
+
+    // Serialize the data to pass it in the URL
+    const serializedData = encodeURIComponent(JSON.stringify(channelData));
+
+    // Redirect with the serialized data as query parameter
+    res.redirect('http://localhost:3000/ytcallback?data=' + serializedData);
+
+  } catch (err) {
+    console.error('Error loading client secret file:', err);
+    res.status(500).send('Internal Server Error');
   }
-  // Authorize a client with the loaded credentials, then call the YouTube API.
-  console.log("read file read secret as "+content);
-  var channelData = authorize(JSON.parse(content), getChannel);
-});
-
-//res.redirect('http://localhost:3000/ytcallback'+'?data=channelDataTest');
-
 });
 
 app.get('/ytcallback', function(req, res) {
-//const channelData = req.query.data;
-const channelData = 'data';
-res.send({'channelData' : channelData});
+  // Deserialize the channelData from the query parameter
+  const serializedData = req.query.data;
+  
+  // Check if the data exists and parse it
+  if (serializedData) {
+    try {
+      const channelData = JSON.parse(decodeURIComponent(serializedData));
+
+      // Now channelData is an actual JavaScript object
+      console.log('Received channelData:', channelData);
+
+      res.send({ 'channelData': channelData });
+    } catch (err) {
+      console.error('Error parsing channelData:', err);
+      res.status(400).send('Invalid channelData');
+    }
+  } else {
+    res.status(400).send('No channelData received');
+  }
 });
 
-function authorize(credentials, callback) {
-  console.log(credentials);
-  var clientSecret = credentials.web.client_secret;
-  var clientId = credentials.web.client_id;
-  var redirectUrl = credentials.web.redirect_uris[0];
-  var oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
+function authorize(credentials) {
+  return new Promise((resolve, reject) => {
+    const clientSecret = credentials.web.client_secret;
+    const clientId = credentials.web.client_id;
+    const redirectUrl = credentials.web.redirect_uris[0];
+    const oauth2Client = new OAuth2(clientId, clientSecret, redirectUrl);
 
-  // Check if we have previously stored a token.
-  fs.readFile(TOKEN_PATH, function(err, token) {
-    if (err) {
-      var channelData = getNewToken(oauth2Client, callback);
-    } else {
-      oauth2Client.credentials = JSON.parse(token);
-     var channelData = callback(oauth2Client);
-     console.log(channelData);
-    }
-
-    return channelData;
+    fs.readFile(TOKEN_PATH, (err, token) => {
+      if (err) {
+        // If no token exists, get a new one
+        getNewToken(oauth2Client).then(channelData => resolve(channelData)).catch(reject);
+      } else {
+        oauth2Client.credentials = JSON.parse(token);
+        getChannel(oauth2Client).then(channelData => resolve(channelData)).catch(reject);
+      }
+    });
   });
 }
 
