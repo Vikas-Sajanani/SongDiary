@@ -38,7 +38,7 @@ function storeToken(token) {
   try {
     fs.mkdirSync(TOKEN_DIR);
   } catch (err) {
-    if (err.code != 'EEXIST') {
+    if (err.code !== 'EEXIST') {
       throw err;
     }
   }
@@ -61,7 +61,7 @@ function getChannel(auth) {
         reject('The API returned an error: ' + err);
       } else {
         var channels = response.data.items;
-        if (channels.length == 0) {
+        if (channels.length === 0) {
           reject('No channel found.');
         } else {
           var channelData = {

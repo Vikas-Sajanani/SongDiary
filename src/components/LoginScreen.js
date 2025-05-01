@@ -7,10 +7,10 @@ const LoginScreen = () => (
     <h1>SongDiary - tunes tell a story</h1>
     <div className="row my-4">
       <div className="col">
-        <a href="/login" className="btn btn-success">Log in with Spotify</a>
+        <a href="http://localhost:8888/login" className="btn btn-success">Log in with Spotify</a>
       </div>
       <div className="col">
-        <a href="/ytlogin" className="btn btn-danger">Log in with YT Music</a>
+        <a href="http://localhost:8888/login" className="btn btn-danger">Log in with YT Music</a>
       </div>
     </div>
     <div className="row">
