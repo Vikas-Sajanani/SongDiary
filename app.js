@@ -169,6 +169,7 @@ app.get('/ytlogin', async function(req, res) {
 
     // Serialize the data to pass it in the URL
     const serializedData = encodeURIComponent(JSON.stringify(channelData));
+    console.log("INSIDE YT LOGIN 8888 ENDPOINT")
 
     // Redirect with the serialized data as query parameter
     res.redirect('http://localhost:3000/ytcallback?data=' + serializedData);
