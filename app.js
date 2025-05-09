@@ -16,7 +16,6 @@ var cookieParser = require('cookie-parser');
 require('dotenv').config();
 
 var fs = require('fs');
-var readline = require('readline');
 var {google} = require('googleapis');
 var OAuth2 = google.auth.OAuth2;
 
@@ -170,6 +169,7 @@ app.get('/ytlogin', async function(req, res) {
 
     // Serialize the data to pass it in the URL
     const serializedData = encodeURIComponent(JSON.stringify(channelData));
+    console.log("INSIDE YT LOGIN 8888 ENDPOINT")
 
     // Redirect with the serialized data as query parameter
     res.redirect('http://localhost:3000/ytcallback?data=' + serializedData);
@@ -221,5 +221,5 @@ function authorize(credentials) {
   });
 }
 
-console.log('Listening on 3000');
-app.listen(3000);
+console.log('Listening on 8888');
+app.listen(8888);
