@@ -1,204 +1,204 @@
-/**
- * This is an example of a basic node.js script that performs
- * the Authorization Code oAuth2 flow to authenticate against
- * the Spotify Accounts.
- *
- * For more information, read
- * https://developer.spotify.com/documentation/web-api/tutorials/code-flow
- */
+const express = require("express");
+const crypto = require("crypto");
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
+const fs = require("fs");
+const path = require("path");
+const { google } = require("googleapis");
+require("dotenv").config();
 
-var express = require('express');
-var request = require('request');
-var crypto = require('crypto');
-var cors = require('cors');
-var querystring = require('querystring');
-var cookieParser = require('cookie-parser');
-require('dotenv').config();
+const { getChannel } = require("./ytauth.js");
 
-var fs = require('fs');
-var readline = require('readline');
-var {google} = require('googleapis');
-var OAuth2 = google.auth.OAuth2;
+const OAuth2 = google.auth.OAuth2;
+const PORT = Number(process.env.PORT || 8888);
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:3000";
+const SPOTIFY_AUTH_STATE_COOKIE = "spotify_auth_state";
+const SPOTIFY_REFRESH_COOKIE = "spotify_refresh_token";
+const TOKEN_DIR = path.join(
+  process.env.HOME || process.env.HOMEPATH || process.env.USERPROFILE || ".",
+  ".credentials"
+);
+const TOKEN_PATH = path.join(TOKEN_DIR, "youtube-nodejs-quickstart.json");
 
-// If modifying these scopes, delete your previously saved credentials
-// at ~/.credentials/youtube-nodejs-quickstart.json
-var TOKEN_DIR = (process.env.HOME || process.env.HOMEPATH ||
-    process.env.USERPROFILE) + '/.credentials/';
-var TOKEN_PATH = TOKEN_DIR + 'youtube-nodejs-quickstart.json';
+const spotifyClientId = process.env.SPOTIFY_CLIENT_ID;
+const spotifyClientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+const spotifyRedirectUri = process.env.REDIRECT_URI;
 
-var client_id = process.env.SPOTIFY_CLIENT_ID; // Your client id Spotify
-var client_secret = process.env.SPOTIFY_CLIENT_SECRET; // Your secret Spotify
-var redirect_uri = process.env.REDIRECT_URI; // Your redirect uri Spotify
-
-const { getNewToken, getChannel } = require("./ytauth.js");
-
-const generateRandomString = (length) => {
-  return crypto
-  .randomBytes(60)
-  .toString('hex')
-  .slice(0, length);
+function requireEnv(name, value) {
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
 }
 
-var stateKey = 'spotify_auth_state';
+requireEnv("SPOTIFY_CLIENT_ID", spotifyClientId);
+requireEnv("SPOTIFY_CLIENT_SECRET", spotifyClientSecret);
+requireEnv("REDIRECT_URI", spotifyRedirectUri);
 
-var app = express();
+const app = express();
 
-app.use(express.static(__dirname + '/public'))
-   .use(cors())
-   .use(cookieParser());
+app
+  .use(express.static(path.join(__dirname, "public")))
+  .use(express.json())
+  .use(
+    cors({
+      origin: CLIENT_ORIGIN,
+      credentials: true,
+    })
+  )
+  .use(cookieParser());
 
-app.get('/login', function(req, res) {
+function generateRandomString(length) {
+  return crypto.randomBytes(Math.ceil(length / 2)).toString("hex").slice(0, length);
+}
 
-  var state = generateRandomString(16);
-  res.cookie(stateKey, state);
-
-  // your application requests authorization
-  var scope = 'user-read-private user-read-email';
-  res.redirect('https://accounts.spotify.com/authorize?' +
-    querystring.stringify({
-      response_type: 'code',
-      client_id: client_id,
-      scope: scope,
-      redirect_uri: redirect_uri,
-      state: state
-    }));
-});
-
-app.get('/callback', function(req, res) {
-
-  // your application requests refresh and access tokens
-  // after checking the state parameter
-
-  var code = req.query.code || null;
-  var state = req.query.state || null;
-  var storedState = req.cookies ? req.cookies[stateKey] : null;
-
-  if (state === null || state !== storedState) {
-    res.redirect('/#' +
-      querystring.stringify({
-        error: 'state_mismatch'
-      }));
-  } else {
-    res.clearCookie(stateKey);
-    var authOptions = {
-      url: 'https://accounts.spotify.com/api/token',
-      form: {
-        code: code,
-        redirect_uri: redirect_uri,
-        grant_type: 'authorization_code'
-      },
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-        Authorization: 'Basic ' + (new Buffer.from(client_id + ':' + client_secret).toString('base64'))
-      },
-      json: true
-    };
-
-    request.post(authOptions, function(error, response, body) {
-      if (!error && response.statusCode === 200) {
-
-        var access_token = body.access_token,
-            refresh_token = body.refresh_token;
-
-        var options = {
-          url: 'https://api.spotify.com/v1/me',
-          headers: { 'Authorization': 'Bearer ' + access_token },
-          json: true
-        };
-
-        // use the access token to access the Spotify Web API
-        request.get(options, function(error, response, body) {
-          console.log(body);
-        });
-
-        // we can also pass the token to the browser to make requests from there
-        res.redirect('/#' +
-          querystring.stringify({
-            access_token: access_token,
-            refresh_token: refresh_token
-          }));
-      } else {
-        res.redirect('/#' +
-          querystring.stringify({
-            error: 'invalid_token'
-          }));
-      }
-    });
-  }
-});
-
-app.get('/refresh_token', function(req, res) {
-
-  var refresh_token = req.query.refresh_token;
-  var authOptions = {
-    url: 'https://accounts.spotify.com/api/token',
-    headers: { 
-      'content-type': 'application/x-www-form-urlencoded',
-      'Authorization': 'Basic ' + (new Buffer.from(client_id + ':' + client_secret).toString('base64')) 
-    },
-    form: {
-      grant_type: 'refresh_token',
-      refresh_token: refresh_token
-    },
-    json: true
+function secureCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
   };
+}
 
-  request.post(authOptions, function(error, response, body) {
-    if (!error && response.statusCode === 200) {
-      var access_token = body.access_token,
-          refresh_token = body.refresh_token;
-      res.send({
-        'access_token': access_token,
-        'refresh_token': refresh_token
+function spotifyBasicAuthHeader() {
+  const credentials = Buffer.from(`${spotifyClientId}:${spotifyClientSecret}`).toString("base64");
+  return `Basic ${credentials}`;
+}
+
+async function requestSpotifyToken(form) {
+  const response = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      Authorization: spotifyBasicAuthHeader(),
+    },
+    body: new URLSearchParams(form),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = body.error_description || body.error || "Spotify token request failed";
+    throw new Error(message);
+  }
+
+  return body;
+}
+
+app.get("/login", (req, res) => {
+  const state = generateRandomString(32);
+  res.cookie(SPOTIFY_AUTH_STATE_COOKIE, state, {
+    ...secureCookieOptions(),
+    maxAge: 10 * 60 * 1000,
+  });
+
+  const scope = "user-read-private user-read-email";
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: spotifyClientId,
+    scope,
+    redirect_uri: spotifyRedirectUri,
+    state,
+  });
+
+  res.redirect(`https://accounts.spotify.com/authorize?${params.toString()}`);
+});
+
+app.get("/callback", async (req, res) => {
+  const code = req.query.code;
+  const state = req.query.state;
+  const storedState = req.cookies ? req.cookies[SPOTIFY_AUTH_STATE_COOKIE] : null;
+
+  if (!state || state !== storedState || typeof code !== "string") {
+    res.clearCookie(SPOTIFY_AUTH_STATE_COOKIE, secureCookieOptions());
+    res.redirect(`/#${new URLSearchParams({ error: "state_mismatch" }).toString()}`);
+    return;
+  }
+
+  try {
+    const tokenResponse = await requestSpotifyToken({
+      code,
+      redirect_uri: spotifyRedirectUri,
+      grant_type: "authorization_code",
+    });
+
+    res.clearCookie(SPOTIFY_AUTH_STATE_COOKIE, secureCookieOptions());
+    if (tokenResponse.refresh_token) {
+      res.cookie(SPOTIFY_REFRESH_COOKIE, tokenResponse.refresh_token, {
+        ...secureCookieOptions(),
+        maxAge: 30 * 24 * 60 * 60 * 1000,
       });
     }
-  });
-});
 
-app.get('/ytlogin', async function(req, res) {
-  try {
-    // Make sure the function is async and you can use await
-    const content = await fs.promises.readFile('client_secret.json', 'utf8');
-    console.log("read file read secret as " + content);
-
-    const credentials = JSON.parse(content);
-
-    // Assuming `authorize` returns a Promise, and we await it here
-    const channelData = await authorize(credentials, getChannel); // This works now
-
-    console.log(channelData);
-
-    // Serialize the data to pass it in the URL
-    const serializedData = encodeURIComponent(JSON.stringify(channelData));
-
-    // Redirect with the serialized data as query parameter
-    res.redirect('http://localhost:3000/ytcallback?data=' + serializedData);
-
+    res.redirect(
+      `/#${new URLSearchParams({
+        access_token: tokenResponse.access_token,
+      }).toString()}`
+    );
   } catch (err) {
-    console.error('Error loading client secret file:', err);
-    res.status(500).send('Internal Server Error');
+    console.error("Spotify callback failed:", err.message);
+    res.redirect(`/#${new URLSearchParams({ error: "invalid_token" }).toString()}`);
   }
 });
 
-app.get('/ytcallback', function(req, res) {
-  // Deserialize the channelData from the query parameter
-  const serializedData = req.query.data;
-  
-  // Check if the data exists and parse it
-  if (serializedData) {
-    try {
-      const channelData = JSON.parse(decodeURIComponent(serializedData));
+app.post("/refresh_token", async (req, res) => {
+  const refreshToken = req.cookies ? req.cookies[SPOTIFY_REFRESH_COOKIE] : null;
 
-      // Now channelData is an actual JavaScript object
-      console.log('Received channelData:', channelData);
+  if (!refreshToken) {
+    res.status(401).send({ error: "missing_refresh_token" });
+    return;
+  }
 
-      res.send({ 'channelData': channelData });
-    } catch (err) {
-      console.error('Error parsing channelData:', err);
-      res.status(400).send('Invalid channelData');
+  try {
+    const tokenResponse = await requestSpotifyToken({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    });
+
+    if (tokenResponse.refresh_token) {
+      res.cookie(SPOTIFY_REFRESH_COOKIE, tokenResponse.refresh_token, {
+        ...secureCookieOptions(),
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+      });
     }
-  } else {
-    res.status(400).send('No channelData received');
+
+    res.send({ access_token: tokenResponse.access_token });
+  } catch (err) {
+    console.error("Spotify refresh failed:", err.message);
+    res.status(502).send({ error: "spotify_refresh_failed" });
+  }
+});
+
+app.get("/ytlogin", async (req, res) => {
+  try {
+    const clientSecretPath = path.join(__dirname, "client_secret.json");
+    const content = await fs.promises.readFile(clientSecretPath, "utf8");
+    const credentials = JSON.parse(content);
+    const channelData = await authorize(credentials);
+
+    res.redirect(
+      `${CLIENT_ORIGIN}/ytcallback?${new URLSearchParams({
+        data: JSON.stringify(channelData),
+      }).toString()}`
+    );
+  } catch (err) {
+    console.error("YouTube login failed:", err.message);
+    res.status(500).send("Internal Server Error");
+  }
+});
+
+app.get("/ytcallback", (req, res) => {
+  const serializedData = req.query.data;
+
+  if (!serializedData || typeof serializedData !== "string") {
+    res.status(400).send("No channelData received");
+    return;
+  }
+
+  try {
+    const channelData = JSON.parse(serializedData);
+    res.send({ channelData });
+  } catch (err) {
+    console.error("Error parsing channelData:", err.message);
+    res.status(400).send("Invalid channelData");
   }
 });
 
@@ -211,15 +211,22 @@ function authorize(credentials) {
 
     fs.readFile(TOKEN_PATH, (err, token) => {
       if (err) {
-        // If no token exists, get a new one
-        getNewToken(oauth2Client).then(channelData => resolve(channelData)).catch(reject);
-      } else {
-        oauth2Client.credentials = JSON.parse(token);
-        getChannel(oauth2Client).then(channelData => resolve(channelData)).catch(reject);
+        reject(new Error("Missing YouTube token. Run the YouTube OAuth setup before using /ytlogin."));
+        return;
       }
+
+      try {
+        oauth2Client.credentials = JSON.parse(token);
+      } catch (parseErr) {
+        reject(parseErr);
+        return;
+      }
+
+      getChannel(oauth2Client).then(resolve).catch(reject);
     });
   });
 }
 
-console.log('Listening on 3000');
-app.listen(3000);
+app.listen(PORT, () => {
+  console.log(`Listening on ${PORT}`);
+});
